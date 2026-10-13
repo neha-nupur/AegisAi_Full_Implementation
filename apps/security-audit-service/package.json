@@ -1,0 +1,28 @@
+{
+  "name": "@aegisai/security-audit-service",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "npx rimraf dist && tsc -p tsconfig.json",
+    "test": "jest --passWithNoTests",
+    "test:watch": "jest --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@aegisai/identity-service": "0.1.0",
+    "@aegisai/shared-types": "0.1.0",
+    "@types/mongodb": "^4.0.7",
+    "express": "4.21.1",
+    "mongodb": "^7.6.0"
+  },
+  "devDependencies": {
+    "@types/express": "4.17.21",
+    "@types/jest": "29.5.13",
+    "@types/supertest": "6.0.2",
+    "jest": "29.7.0",
+    "supertest": "7.0.0",
+    "ts-jest": "29.2.5",
+    "typescript": "5.6.3"
+  }
+}

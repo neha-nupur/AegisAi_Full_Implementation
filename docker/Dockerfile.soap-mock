@@ -1,0 +1,20 @@
+# AegisAI legacy SOAP mock (Phase 10).
+#
+# Standalone image — soap-mock is not part of the npm workspaces
+# graph (see soap-mock/package.json), so this Dockerfile only ever
+# needs soap-mock/'s own files, not the rest of the monorepo.
+
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY soap-mock/package.json ./
+RUN npm install --omit=dev
+
+COPY soap-mock/service.wsdl ./service.wsdl
+COPY soap-mock/server ./server
+
+ENV SOAP_MOCK_PORT=5005
+EXPOSE 5005
+
+CMD ["node", "server/index.js"]

@@ -1,0 +1,17 @@
+{
+  "name": "@aegisai/worker",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "echo \"no tests yet (worker starts in Phase 6+)\" && exit 0",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@aegisai/shared-types": "0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3"
+  }
+}

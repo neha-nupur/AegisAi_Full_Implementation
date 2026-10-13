@@ -1,0 +1,40 @@
+{
+  "name": "@aegisai/identity-service",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "migrate": "node dist/db/migrate.js",
+    "test": "jest --passWithNoTests",
+    "test:watch": "jest --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@aegisai/config": "0.1.0",
+    "@aegisai/security-audit-service": "0.1.0",
+    "@aegisai/shared-types": "0.1.0",
+    "bcrypt": "5.1.1",
+    "cockatiel": "^3.2.1",
+    "dotenv": "16.4.5",
+    "express": "4.21.1",
+    "jsonwebtoken": "9.0.2",
+    "nodemailer": "^10.0.16",
+    "pg": "8.13.1",
+    "soap": "^1.1.5"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "5.0.2",
+    "@types/express": "4.17.21",
+    "@types/jest": "29.5.13",
+    "@types/jsonwebtoken": "9.0.7",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pg": "8.11.10",
+    "@types/supertest": "6.0.2",
+    "jest": "29.7.0",
+    "supertest": "7.0.0",
+    "ts-jest": "29.2.5",
+    "typescript": "5.6.3"
+  }
+}

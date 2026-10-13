@@ -1,0 +1,11 @@
+{
+  "name": "@aegisai/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'web: React/Vite frontend scaffolding arrives in Phase 9' && exit 0",
+    "build": "echo 'web: nothing to build yet (Phase 9)' && exit 0",
+    "test": "echo 'web: no tests yet (Phase 9)' && exit 0",
+    "typecheck": "echo 'web: no TypeScript yet (Phase 9)' && exit 0"
+  }
+}

@@ -1,0 +1,171 @@
+# AegisAI — full local deployment (Phase 11).
+#
+# Phase 0 scope was datastores only. Phase 10 added soap-mock. Phase
+# 11 adds the application services themselves (api, worker,
+# frontend), completing checklist item 28 ("Docker, and twelve-factor
+# configuration").
+#
+# Usage (from the repository root):
+#   docker compose -f docker/docker-compose.yml --env-file .env up -d --build
+#   docker compose -f docker/docker-compose.yml --env-file .env down
+#
+# Secrets come from the ignored root .env (see .env.example).
+# Host-side DATABASE_URL / MONGODB_URL / REDIS_URL use localhost
+# published ports. Container-side URLs use Compose service DNS.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: aegisai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - aegisai_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mongo:
+    image: mongo:7
+    container_name: aegisai-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: aegisai
+    ports:
+      - "27017:27017"
+    volumes:
+      - aegisai_mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: aegisai-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - aegisai_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Phase 10: legacy SOAP mock (soap-mock/). Standalone — not part of
+  # the npm workspaces graph, so it builds from its own small
+  # package.json rather than the monorepo's. Never a dependency of
+  # any other service's healthcheck or startup order; the Gateway's
+  # own request flow works whether or not this container is up (see
+  # soap-mock/README.md and docs/service-boundaries.md).
+  soap-mock:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.soap-mock
+    container_name: aegisai-soap-mock
+    restart: unless-stopped
+    environment:
+      SOAP_MOCK_PORT: ${SOAP_MOCK_PORT:-5005}
+    ports:
+      - "${SOAP_MOCK_PORT:-5005}:5005"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5005/"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Phase 11: the API. Waits for every datastore's healthcheck before
+  # starting — this is the fix for a real bug found during Phase 11
+  # hardening (getRedisClient() used to fail deterministically on a
+  # cold start; see docs/phase-progress.md's Phase 11 section). Real
+  # secrets are injected as environment variables, not baked into the
+  # image. Internal URLs use Compose service names, not localhost.
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    container_name: aegisai-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: ${PORT:-4000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      MONGODB_URL: mongodb://mongo:27017/aegisai
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      SOAP_MOCK_URL: http://soap-mock:5005
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    ports:
+      - "${PORT:-4000}:4000"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Phase 11: background worker. Currently runs the Phase 0
+  # placeholder (apps/worker/src/index.ts) — no BullMQ job processing
+  # exists yet, so this container starts, runs the placeholder, and
+  # exits; `restart: unless-stopped` will keep restarting it, which
+  # is expected/harmless until real job logic lands. Included now so
+  # the container is ready without a Dockerfile rewrite once it is.
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    container_name: aegisai-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      MONGODB_URL: mongodb://mongo:27017/aegisai
+      REDIS_URL: redis://redis:6379
+
+  # Phase 11: frontend. Proxies /v1/* to the api container (see
+  # docker/frontend-nginx.conf) so the SPA can call the API without
+  # a CORS round trip inside this compose network.
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/v1}
+    container_name: aegisai-frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+
+volumes:
+  aegisai_postgres_data:
+  aegisai_mongo_data:
+  aegisai_redis_data:

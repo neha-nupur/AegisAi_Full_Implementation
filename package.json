@@ -1,0 +1,47 @@
+{
+  "name": "aegisai",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AegisAI \u2014 Enterprise AI Security & Governance Gateway (monorepo root)",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run prep && npm run dev -w apps/api",
+    "build:packages": "npm run build -w packages/shared-types -w packages/config -w packages/schemas",
+    "build:services": "npm run build -w apps/security-audit-service -w apps/identity-service -w apps/privacy-service -w apps/policy-service -w apps/model-provider-service -w apps/gateway-service",
+    "prep": "npm run build:packages && npm run build:services",
+    "build": "npm run prep && npm run build -w apps/api -w apps/frontend",
+    "db:migrate:identity": "npm run build -w apps/identity-service && npm run migrate -w apps/identity-service",
+    "test": "npm run prep && npm run test --workspaces --if-present",
+    "test:watch": "npm run prep && npm run test:watch -w apps/api",
+    "typecheck": "npm run prep && npm run typecheck --workspaces --if-present",
+    "lint": "echo 'lint: not configured yet (Phase 0 placeholder)' && exit 0",
+    "db:migrate": "npm run build:services && npm run migrate -w apps/identity-service && npm run migrate -w apps/gateway-service && npm run migrate -w apps/policy-service && npm run migrate -w apps/model-provider-service",
+    "db:seed": "npm run seed -w apps/model-provider-service"
+  },
+  "devDependencies": {
+    "@types/ioredis": "^5.0.0",
+    "@types/ioredis-mock": "^8.2.8",
+    "@types/node": "20.14.15",
+    "@types/pg": "^8.23.1",
+    "ioredis-mock": "^8.13.1",
+    "typescript": "5.6.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ioredis": "^5.0.0"
+  },
+  "overrides": {
+    "graphql": "16.14.2",
+    "@apollo/client": {
+      "graphql": "16.14.2"
+    },
+    "@graphql-tools/schema": {
+      "graphql": "16.14.2"
+    }
+  }
+}

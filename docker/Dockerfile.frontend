@@ -1,0 +1,28 @@
+# AegisAI frontend (apps/frontend) — Phase 11.
+#
+# Multi-stage: build the Vite app in a Node image, then serve the
+# static output with nginx — the frontend has no server-side runtime
+# dependencies (no npm workspace linking needed at serve time), so
+# this is a normal static-site multi-stage build, unlike
+# Dockerfile.api/Dockerfile.worker.
+#
+# Phase 9 note (see docs/phase-progress.md): apps/frontend currently
+# builds and serves, but is still the default Vite scaffold — none
+# of the 11 required dashboard screens exist yet. This Dockerfile
+# packages whatever apps/frontend currently contains; it does not
+# make the frontend more complete.
+
+FROM node:20-bookworm AS build
+WORKDIR /app
+RUN npm config set strict-ssl false
+COPY . .
+ARG VITE_API_BASE_URL=/v1
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+RUN npm install --no-audit --no-fund --legacy-peer-deps \
+  && find . -path "*/node_modules/.bin/*" -type f -exec chmod +x {} \;
+RUN npm run build --workspace=apps/frontend
+
+FROM nginx:1.27-alpine
+COPY --from=build /app/apps/frontend/dist /usr/share/nginx/html
+COPY docker/frontend-nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80

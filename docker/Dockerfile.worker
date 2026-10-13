@@ -1,0 +1,28 @@
+# AegisAI background worker (apps/worker) — Phase 11.
+#
+# Same single-stage, whole-repo-copy approach as Dockerfile.api, for
+# the same reason (npm workspace symlinks). See that file's comment
+# for the full reasoning.
+#
+# Phase 0 placeholder — see apps/worker/src/index.ts and
+# docs/phase-progress.md: no BullMQ or real job processing exists
+# yet ("do not introduce dependencies without justification" —
+# nothing has needed asynchronous processing so far). This image
+# builds and runs the placeholder so the container is ready the
+# moment real worker logic lands, without a Dockerfile rewrite.
+
+FROM node:20-bookworm
+
+WORKDIR /app
+RUN npm config set strict-ssl false
+
+COPY . .
+
+RUN npm install --no-audit --no-fund --legacy-peer-deps \
+  && find . -path "*/node_modules/.bin/*" -type f -exec chmod +x {} \;
+
+RUN npm run build --workspace=packages/shared-types && npm run build --workspace=apps/worker
+
+ENV NODE_ENV=production
+
+CMD ["node", "apps/worker/dist/index.js"]

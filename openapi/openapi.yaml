@@ -1,0 +1,994 @@
+openapi: 3.0.3
+info:
+  title: AegisAI API
+  description: >
+    Enterprise AI Security & Governance Gateway. Sits between enterprise
+    applications/AI agents and AI model providers, enforcing identity,
+    privacy, policy, routing, and audit on every request.
+
+
+    Every response follows one of two envelopes: `{ "data": ..., "traceId": ... }`
+    on success, or `{ "error": { "code", "message", "details?", "traceId" } }`
+    on failure — see the `Error` schema below. Every GET on a resource
+    listed here also supports `Accept: application/xml` (see
+    `docs/api-conventions.md`'s content-negotiation section) — this
+    document describes the JSON representation; the XML representation
+    wraps the identical body under a `<response>` root element.
+  version: "1.0.0"
+  contact:
+    name: AegisAI
+servers:
+  - url: /v1
+    description: Default API version prefix (relative — same origin as this document is served from)
+
+tags:
+  - name: Auth
+    description: Login and token issuance (Identity & Access Management Service)
+  - name: Users
+  - name: Service Accounts
+  - name: Organizations
+  - name: Legacy Integration
+    description: Phase 10 — the SOAP connector demonstration endpoint
+  - name: AI Requests
+    description: AI Gateway Service — the core request flow
+  - name: Policies
+  - name: Approvals
+  - name: Providers
+  - name: Models
+  - name: Security & Audit
+  - name: Health
+    description: Per-service liveness checks, mounted under /v1/<service>/health
+
+paths:
+  # ---------------------------------------------------------------- Auth
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in with email and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email, example: YOUR_SEED_ADMIN_EMAIL }
+                password: { type: string, format: password, example: YOUR_SEED_ADMIN_PASSWORD }
+      responses:
+        "200":
+          description: Login succeeded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      token: { type: string, description: JWT access token }
+                      expiresAt: { type: string, format: date-time }
+                  traceId: { $ref: "#/components/schemas/TraceId" }
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: Missing/invalid request body
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  # ---------------------------------------------------------------- Users
+  /users:
+    get:
+      tags: [Users]
+      summary: List users in the caller's organization
+      responses:
+        "200": { $ref: "#/components/responses/UserList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Users]
+      summary: Create a user in the caller's organization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateUserInput" }
+      responses:
+        "201": { $ref: "#/components/responses/UserSingle" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Email already in use
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /users/{id}:
+    parameters:
+      - $ref: "#/components/parameters/PathId"
+    get:
+      tags: [Users]
+      summary: Get a user by id (404 if it belongs to another organization)
+      responses:
+        "200": { $ref: "#/components/responses/UserSingle" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Users]
+      summary: Update a user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: { $ref: "#/components/schemas/Role" }
+                status: { type: string, enum: [active, disabled] }
+      responses:
+        "200": { $ref: "#/components/responses/UserSingle" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Users]
+      summary: Disable a user (soft delete)
+      responses:
+        "204": { description: Disabled successfully, no content }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ------------------------------------------------------ Service Accounts
+  /service-accounts:
+    get:
+      tags: [Service Accounts]
+      summary: List service accounts in the caller's organization
+      responses:
+        "200":
+          description: List of service accounts (credential hash never returned)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/ServiceAccount" } }
+                  traceId: { $ref: "#/components/schemas/TraceId" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [Service Accounts]
+      summary: Create a service account
+      description: >
+        The response includes the plaintext credential exactly once —
+        it is never retrievable again (only its hash and a display
+        prefix are persisted).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, example: ci-pipeline-bot }
+      responses:
+        "201":
+          description: Created — includes the one-time plaintext credential
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    allOf:
+                      - { $ref: "#/components/schemas/ServiceAccount" }
+                      - type: object
+                        properties:
+                          credential: { type: string, description: "One-time plaintext secret — shown only in this response" }
+                  traceId: { $ref: "#/components/schemas/TraceId" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+  /service-accounts/{id}:
+    parameters:
+      - $ref: "#/components/parameters/PathId"
+    patch:
+      tags: [Service Accounts]
+      summary: Update a service account
+      responses:
+        "200": { description: Updated }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Service Accounts]
+      summary: Disable a service account
+      responses:
+        "204": { description: Disabled, no content }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # --------------------------------------------------------- Organizations
+  /organizations/{id}:
+    parameters:
+      - $ref: "#/components/parameters/PathId"
+    get:
+      tags: [Organizations]
+      summary: Get an organization by id (only the caller's own)
+      responses:
+        "200":
+          description: Organization
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Organization" }
+                  traceId: { $ref: "#/components/schemas/TraceId" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Organizations]
+      summary: Update the organization (ORGANIZATION_ADMIN only)
+      responses:
+        "200": { description: Updated }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ------------------------------------------------------ Legacy Integration
+  /legacy-employees/{employeeId}:
+    get:
+      tags: [Legacy Integration]
+      summary: Check an employee's status in the legacy directory (SOAP connector, Phase 10)
+      parameters:
+        - name: employeeId
+          in: path
+          required: true
+          schema: { type: string }
+          example: E1001
+      responses:
+        "200":
+          description: Legacy directory result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/LegacyEmployeeRecord" }
+                  traceId: { $ref: "#/components/schemas/TraceId" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "502":
+          description: The legacy SOAP system returned an error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: The legacy SOAP system's circuit breaker is open
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "504":
+          description: The legacy SOAP call timed out
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  # ---------------------------------------------------------------- AI Requests
+  /ai-requests:
+    get:
+      tags: [AI Requests]
+      summary: List AI requests in the caller's organization (cursor-paginated)
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Paginated list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/AIRequest" } }
+                  nextCursor: { type: string, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      tags: [AI Requests]
+      summary: Submit an AI request
+      description: >
+        Synchronous: the response reflects the request's terminal or
+        paused state (COMPLETED, FAILED, BLOCKED, or APPROVAL_REQUIRED)
+        — see docs/api-conventions.md's Gateway section for the full
+        state machine and why this design was chosen over a queued one.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+          description: Same key + same body returns the prior result; same key + different body is 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAIRequestInput" }
+            examples:
+              normal: { value: { input: "Summarize this quarterly report.", modelPreference: auto } }
+              withPII: { value: { input: "Email the results to jane.doe@example.com", modelPreference: auto } }
+      responses:
+        "201":
+          description: Request processed to a terminal or paused state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/AIRequest" }
+                  traceId: { $ref: "#/components/schemas/TraceId" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403":
+          description: Blocked by policy (POLICY_BLOCK)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Idempotency-Key reused with a different request body
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502":
+          description: The AI provider failed (after retries)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /ai-requests/{id}:
+    parameters:
+      - $ref: "#/components/parameters/PathId"
+    get:
+      tags: [AI Requests]
+      summary: Get a single AI request by id
+      responses:
+        "200":
+          description: The request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/AIRequest" }
+                  traceId: { $ref: "#/components/schemas/TraceId" }
+              examples:
+                completed:
+                  summary: Same resource, JSON representation
+                  value:
+                    data:
+                      id: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                      organizationId: "11111111-1111-1111-1111-111111111111"
+                      requesterId: "22222222-2222-2222-2222-222222222222"
+                      input: "Summarize this quarterly report."
+                      modelPreference: auto
+                      policyId: null
+                      status: COMPLETED
+                      modelId: "mock-chat-standard"
+                      providerId: "mock-provider"
+                      traceId: "9b94970c-2905-4f41-a55b-fca1844afd7f"
+                      output: "[mock-provider response] Summarize this quarterly report."
+                      errorMessage: null
+                      createdAt: "2026-01-01T00:00:00.000Z"
+                      updatedAt: "2026-01-01T00:00:01.000Z"
+                    traceId: "9b94970c-2905-4f41-a55b-fca1844afd7f"
+            application/xml:
+              schema:
+                type: string
+              examples:
+                completed:
+                  summary: Same resource, XML representation (identical fields)
+                  value: |
+                    <response>
+                      <data>
+                        <id>3fa85f64-5717-4562-b3fc-2c963f66afa6</id>
+                        <status>COMPLETED</status>
+                        <output>[mock-provider response] Summarize this quarterly report.</output>
+                      </data>
+                      <traceId>9b94970c-2905-4f41-a55b-fca1844afd7f</traceId>
+                    </response>
+        "304": { description: Not Modified (conditional GET via If-None-Match) }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ---------------------------------------------------------------- Policies
+  /policies:
+    get:
+      tags: [Policies]
+      summary: List policies in the caller's organization
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Policy" } }
+                  traceId: { $ref: "#/components/schemas/TraceId" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [Policies]
+      summary: Create a policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePolicyInput" }
+            examples:
+              default:
+                value:
+                  name: "Default governance policy"
+                  rules:
+                    - { id: "block-secrets", action: BLOCK, when: { findingTypes: [API_KEY, PASSWORD] } }
+                    - { id: "require-approval-sensitive", action: REQUIRE_APPROVAL, when: { findingTypes: [SENSITIVE_KEYWORD] } }
+                    - { id: "mask-pii", action: MASK, when: { findingTypes: [EMAIL, PHONE, PAN, AADHAAR] } }
+                    - { id: "allow-default", action: ALLOW }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Policy" }
+                  traceId: { $ref: "#/components/schemas/TraceId" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /policies/{id}:
+    parameters:
+      - $ref: "#/components/parameters/PathId"
+    get:
+      tags: [Policies]
+      summary: Get a policy by id
+      responses:
+        "200": { description: Policy }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Policies]
+      summary: Update a policy (bumps version by 1)
+      responses:
+        "200": { description: Updated }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Policies]
+      summary: Delete a policy
+      responses:
+        "204": { description: Deleted, no content }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ---------------------------------------------------------------- Approvals
+  /approvals:
+    get:
+      tags: [Approvals]
+      summary: List approvals in the caller's organization
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [PENDING, APPROVED, REJECTED] }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Approval" } }
+                  traceId: { $ref: "#/components/schemas/TraceId" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /approvals/{id}:
+    parameters:
+      - $ref: "#/components/parameters/PathId"
+    get:
+      tags: [Approvals]
+      summary: Get an approval by id
+      responses:
+        "200": { description: Approval }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /approvals/{id}/approve:
+    parameters:
+      - $ref: "#/components/parameters/PathId"
+    post:
+      tags: [Approvals]
+      summary: Approve a pending approval — resumes the paused AI request
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        "200": { description: Approved; the underlying AI request resumes to ROUTING }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Already decided }
+  /approvals/{id}/reject:
+    parameters:
+      - $ref: "#/components/parameters/PathId"
+    post:
+      tags: [Approvals]
+      summary: Reject a pending approval — the AI request becomes BLOCKED
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        "200": { description: Rejected }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Already decided }
+
+  # ---------------------------------------------------------------- Providers
+  /providers:
+    get:
+      tags: [Providers]
+      summary: List the global provider catalog
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Provider" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [Providers]
+      summary: Register a provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateProviderInput" }
+      responses:
+        "201": { description: Created }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /providers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/PathId"
+    get:
+      tags: [Providers]
+      summary: Get a provider by id
+      responses:
+        "200": { description: Provider }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ---------------------------------------------------------------- Models
+  /models:
+    get:
+      tags: [Models]
+      summary: List the global model catalog
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Model" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [Models]
+      summary: Register a model
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateModelInput" }
+      responses:
+        "201": { description: Created }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /models/{id}:
+    parameters:
+      - $ref: "#/components/parameters/PathId"
+    get:
+      tags: [Models]
+      summary: Get a model by id
+      responses:
+        "200": { description: Model }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ---------------------------------------------------------- Security & Audit
+  /traces:
+    get:
+      tags: [Security & Audit]
+      summary: List request traces in the caller's organization
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Paginated list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/RequestTrace" } }
+                  nextCursor: { type: string, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /traces/{traceId}:
+    get:
+      tags: [Security & Audit]
+      summary: Get one trace, with its full event timeline
+      parameters:
+        - name: traceId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Trace with events populated }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /audit-events:
+    get:
+      tags: [Security & Audit]
+      summary: List audit events (optionally filtered by traceId)
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: traceId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/AuditEvent" } }
+                  nextCursor: { type: string, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /security-events:
+    get:
+      tags: [Security & Audit]
+      summary: List security events, optionally filtered by severity
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: severity
+          in: query
+          schema: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+      responses:
+        "200":
+          description: Paginated list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/SecurityEvent" } }
+                  nextCursor: { type: string, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  # ---------------------------------------------------------------- Health
+  /identity/health: { $ref: "#/components/pathItems/ServiceHealth" }
+  /gateway/health: { $ref: "#/components/pathItems/ServiceHealth" }
+  /privacy/health: { $ref: "#/components/pathItems/ServiceHealth" }
+  /policy/health: { $ref: "#/components/pathItems/ServiceHealth" }
+  /model-provider/health: { $ref: "#/components/pathItems/ServiceHealth" }
+  /security-audit/health: { $ref: "#/components/pathItems/ServiceHealth" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    PathId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+      description: Opaque cursor from a previous page's nextCursor
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, default: 50, minimum: 1, maximum: 200 }
+  responses:
+    Unauthorized:
+      description: Missing or invalid bearer token
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Authenticated, but missing the required permission
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Not found (including a resource that exists but belongs to another organization)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationError:
+      description: Request failed schema validation (AJV)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit: { schema: { type: integer } }
+        X-RateLimit-Remaining: { schema: { type: integer } }
+        Retry-After: { schema: { type: integer } }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    UserList:
+      description: List of users
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data: { type: array, items: { $ref: "#/components/schemas/User" } }
+              traceId: { $ref: "#/components/schemas/TraceId" }
+    UserSingle:
+      description: A single user
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data: { $ref: "#/components/schemas/User" }
+              traceId: { $ref: "#/components/schemas/TraceId" }
+  pathItems:
+    ServiceHealth:
+      get:
+        tags: [Health]
+        summary: Per-service liveness check (no auth required)
+        security: []
+        responses:
+          "200":
+            description: Service is up
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    service: { type: string }
+                    status: { type: string, example: ok }
+                    timestamp: { type: string, format: date-time }
+  schemas:
+    TraceId:
+      type: string
+      description: Correlation ID for this request, propagated end to end
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [code, message, traceId]
+          properties:
+            code: { type: string, example: VALIDATION_ERROR }
+            message: { type: string }
+            details: { type: object, additionalProperties: true }
+            traceId: { $ref: "#/components/schemas/TraceId" }
+    Role:
+      type: string
+      enum: [ORGANIZATION_ADMIN, DEVELOPER, SECURITY_AUDITOR]
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        organizationId: { type: string, format: uuid }
+        email: { type: string, format: email }
+        role: { $ref: "#/components/schemas/Role" }
+        status: { type: string, enum: [active, disabled] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreateUserInput:
+      type: object
+      required: [email, password, role]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+        role: { $ref: "#/components/schemas/Role" }
+    ServiceAccount:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        organizationId: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string, enum: [active, disabled] }
+        permissions: { type: array, items: { type: string } }
+        credentialPrefix: { type: string, description: "First few characters of the credential, for display/audit only" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Organization:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        status: { type: string, enum: [active, suspended] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    LegacyEmployeeRecord:
+      type: object
+      properties:
+        employeeId: { type: string }
+        exists: { type: boolean }
+        fullName: { type: string, nullable: true }
+        department: { type: string, nullable: true }
+        status: { type: string, enum: [ACTIVE, INACTIVE, NOT_FOUND] }
+    AIRequestStatus:
+      type: string
+      enum: [RECEIVED, VALIDATED, ROUTING, PROVIDER_CALL, COMPLETED, FAILED, BLOCKED, APPROVAL_REQUIRED]
+    CreateAIRequestInput:
+      type: object
+      required: [input]
+      properties:
+        input: { type: string, minLength: 1, maxLength: 20000, example: "Summarize this customer support message." }
+        modelPreference: { type: string, default: auto, example: auto }
+        policyId: { type: string, nullable: true }
+    AIRequest:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        organizationId: { type: string, format: uuid }
+        requesterId: { type: string, format: uuid }
+        input: { type: string }
+        modelPreference: { type: string }
+        policyId: { type: string, nullable: true }
+        status: { $ref: "#/components/schemas/AIRequestStatus" }
+        modelId: { type: string, nullable: true }
+        providerId: { type: string, nullable: true }
+        traceId: { type: string }
+        output: { type: string, nullable: true }
+        errorMessage: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PolicyAction:
+      type: string
+      enum: [ALLOW, BLOCK, MASK, REQUIRE_APPROVAL, ROUTE]
+    PolicyRuleCondition:
+      type: object
+      properties:
+        findingTypes: { type: array, items: { type: string, enum: [EMAIL, PHONE, PAN, AADHAAR, API_KEY, PASSWORD, SENSITIVE_KEYWORD] } }
+        roles: { type: array, items: { $ref: "#/components/schemas/Role" } }
+        modelPreference: { type: array, items: { type: string } }
+    PolicyRule:
+      type: object
+      required: [id, action]
+      properties:
+        id: { type: string }
+        action: { $ref: "#/components/schemas/PolicyAction" }
+        when: { $ref: "#/components/schemas/PolicyRuleCondition" }
+    CreatePolicyInput:
+      type: object
+      required: [name, rules]
+      properties:
+        name: { type: string }
+        rules: { type: array, items: { $ref: "#/components/schemas/PolicyRule" }, minItems: 1 }
+        status: { type: string, enum: [ACTIVE, INACTIVE], default: ACTIVE }
+    Policy:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        organizationId: { type: string, format: uuid }
+        name: { type: string }
+        version: { type: integer }
+        rules: { type: array, items: { $ref: "#/components/schemas/PolicyRule" } }
+        status: { type: string, enum: [ACTIVE, INACTIVE] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Approval:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        organizationId: { type: string, format: uuid }
+        aiRequestId: { type: string, format: uuid }
+        policyId: { type: string }
+        matchedRuleId: { type: string, nullable: true }
+        requesterId: { type: string, format: uuid }
+        reason: { type: string }
+        status: { type: string, enum: [PENDING, APPROVED, REJECTED] }
+        decidedBy: { type: string, nullable: true }
+        decisionReason: { type: string, nullable: true }
+        decidedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ProviderType:
+      type: string
+      enum: [openai, anthropic, mock, azure, bedrock]
+    CreateProviderInput:
+      type: object
+      required: [name, type, baseUrl, status, healthStatus, priority, configurationReference]
+      properties:
+        name: { type: string }
+        type: { $ref: "#/components/schemas/ProviderType" }
+        baseUrl: { type: string, format: uri }
+        status: { type: string, enum: [active, inactive, deprecated] }
+        healthStatus: { type: string, enum: [healthy, degraded, unhealthy, unknown] }
+        priority: { type: integer }
+        configurationReference: { type: string, description: "Name of the env var holding the API key — never the key itself" }
+    Provider:
+      allOf:
+        - { $ref: "#/components/schemas/CreateProviderInput" }
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+    CostMetadata:
+      type: object
+      properties:
+        inputCostPer1k: { type: number }
+        outputCostPer1k: { type: number }
+        currency: { type: string, example: USD }
+    CreateModelInput:
+      type: object
+      required: [providerId, name, capabilities, sensitivityLevel, costMetadata, active, configuration]
+      properties:
+        providerId: { type: string, format: uuid }
+        name: { type: string }
+        capabilities: { type: array, items: { type: string }, example: [chat] }
+        sensitivityLevel: { type: string, enum: [low, medium, high, critical] }
+        costMetadata: { $ref: "#/components/schemas/CostMetadata" }
+        active: { type: boolean }
+        configuration: { type: object, additionalProperties: true }
+    Model:
+      allOf:
+        - { $ref: "#/components/schemas/CreateModelInput" }
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+    RequestTrace:
+      type: object
+      properties:
+        id: { type: string }
+        aiRequestId: { type: string }
+        organizationId: { type: string }
+        requesterId: { type: string }
+        events: { type: array, items: { $ref: "#/components/schemas/AuditEvent" } }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time, nullable: true }
+    AuditEvent:
+      type: object
+      properties:
+        id: { type: string }
+        traceId: { type: string }
+        aiRequestId: { type: string }
+        organizationId: { type: string }
+        eventType: { type: string, example: REQUEST_RECEIVED }
+        metadata: { type: object, additionalProperties: true }
+        timestamp: { type: string, format: date-time }
+    SecurityEvent:
+      type: object
+      properties:
+        id: { type: string }
+        traceId: { type: string }
+        aiRequestId: { type: string }
+        organizationId: { type: string }
+        eventType: { type: string, example: POLICY_BLOCK }
+        severity: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+        metadata: { type: object, additionalProperties: true }
+        timestamp: { type: string, format: date-time }
+
+security:
+  - bearerAuth: []

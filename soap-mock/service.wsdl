@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AegisAI legacy SOAP mock — CheckLegacyEmployee.
+
+  Simulates a legacy enterprise HR/directory system that a real
+  AegisAI deployment might need to integrate with (e.g. to verify a
+  service-account requester is still a legitimate employee before
+  honoring a sensitive AI request). This is deliberately a small,
+  single-operation WSDL — enough to demonstrate reading a WSDL and
+  making a real SOAP call (checklist item 24), not a general-purpose
+  legacy system.
+-->
+<definitions name="LegacyEmployeeService"
+             targetNamespace="urn:aegisai:legacy-employee"
+             xmlns:tns="urn:aegisai:legacy-employee"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+             xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+             xmlns="http://schemas.xmlsoap.org/wsdl/">
+
+  <types>
+    <xsd:schema targetNamespace="urn:aegisai:legacy-employee">
+      <xsd:element name="CheckLegacyEmployeeRequest">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="employeeId" type="xsd:string" />
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="CheckLegacyEmployeeResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="employeeId" type="xsd:string" />
+            <xsd:element name="exists" type="xsd:boolean" />
+            <xsd:element name="fullName" type="xsd:string" minOccurs="0" />
+            <xsd:element name="department" type="xsd:string" minOccurs="0" />
+            <xsd:element name="status" type="xsd:string" />
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+    </xsd:schema>
+  </types>
+
+  <message name="CheckLegacyEmployeeInput">
+    <part name="parameters" element="tns:CheckLegacyEmployeeRequest" />
+  </message>
+  <message name="CheckLegacyEmployeeOutput">
+    <part name="parameters" element="tns:CheckLegacyEmployeeResponse" />
+  </message>
+
+  <portType name="LegacyEmployeePortType">
+    <operation name="CheckLegacyEmployee">
+      <input message="tns:CheckLegacyEmployeeInput" />
+      <output message="tns:CheckLegacyEmployeeOutput" />
+    </operation>
+  </portType>
+
+  <binding name="LegacyEmployeeBinding" type="tns:LegacyEmployeePortType">
+    <soap:binding transport="http://schemas.xmlsoap.org/soap/http" style="document" />
+    <operation name="CheckLegacyEmployee">
+      <soap:operation soapAction="urn:aegisai:legacy-employee#CheckLegacyEmployee" />
+      <input>
+        <soap:body use="literal" />
+      </input>
+      <output>
+        <soap:body use="literal" />
+      </output>
+    </operation>
+  </binding>
+
+  <service name="LegacyEmployeeService">
+    <port name="LegacyEmployeePort" binding="tns:LegacyEmployeeBinding">
+      <soap:address location="http://localhost:5005/legacy-employee" />
+    </port>
+  </service>
+</definitions>

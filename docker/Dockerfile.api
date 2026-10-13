@@ -1,0 +1,42 @@
+# AegisAI API (apps/api) — Phase 11.
+#
+# Single-stage build, from the monorepo root as build context (see
+# docker-compose.yml's `context: ..`). This is an npm-workspaces
+# monorepo where every service package is linked via npm's own
+# workspace symlinks (node_modules/@aegisai/*) — a mechanism that
+# does not survive naive file copying (this exact failure mode, lost
+# workspace symlinks from a bad zip/unzip, was found and fixed during
+# this project's Phase 10/11 hardening; see docs/phase-progress.md).
+# Copying the whole repo and running `npm install` inside the image
+# (rather than trying to cherry-pick which packages to copy, or using
+# a multi-stage copy of node_modules) sidesteps that fragility
+# entirely — appropriately, given this project's current size and
+# maturity; a leaner multi-stage build is a reasonable future
+# optimization once the workspace graph stabilizes.
+
+FROM node:20-bookworm
+
+WORKDIR /app
+RUN npm config set strict-ssl false
+
+# Copy the whole repo (node_modules/dist excluded via .dockerignore).
+COPY . .
+
+# --legacy-peer-deps: this monorepo has one pre-existing peer conflict
+# (ioredis@6 vs @types/ioredis-mock wanting ioredis@^5) unrelated to
+# the API itself — see docs/checklist-mapping.md.
+RUN npm install --no-audit --no-fund --legacy-peer-deps \
+  && find . -path "*/node_modules/.bin/*" -type f -exec chmod +x {} \;
+
+RUN npm run build
+
+ENV NODE_ENV=production
+EXPOSE 4000
+
+# WORKDIR is the repo root so `dotenv/config` (apps/api/src/index.ts)
+# finds .env the same way it does in local dev — in Docker Compose,
+# real environment variables are injected instead (see
+# docker-compose.yml's `environment:` block), so no .env file is
+# actually required at runtime; this only matters for local
+# `docker run` without compose.
+CMD ["node", "apps/api/dist/index.js"]
