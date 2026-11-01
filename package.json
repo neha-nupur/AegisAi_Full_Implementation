@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "npm run prep && npm run dev -w apps/api",
     "build:packages": "npm run build -w packages/shared-types -w packages/config -w packages/schemas",
-    "build:services": "npm run build -w apps/security-audit-service -w apps/identity-service -w apps/privacy-service -w apps/policy-service -w apps/model-provider-service -w apps/gateway-service",
+    "build:services": "npm run build -w apps/identity-service && npm run build -w apps/security-audit-service && npm run build -w apps/privacy-service -w apps/policy-service -w apps/model-provider-service -w apps/gateway-service",
     "prep": "npm run build:packages && npm run build:services",
     "build": "npm run prep && npm run build -w apps/api -w apps/frontend",
     "db:migrate:identity": "npm run build -w apps/identity-service && npm run migrate -w apps/identity-service",
