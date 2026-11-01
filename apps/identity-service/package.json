@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "@aegisai/config": "0.1.0",
-    "@aegisai/security-audit-service": "0.1.0",
     "@aegisai/shared-types": "0.1.0",
     "bcrypt": "5.1.1",
     "cockatiel": "^3.2.1",

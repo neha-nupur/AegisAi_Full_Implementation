@@ -39,4 +39,6 @@ export { TokenService, type TokenSubject, type IssuedToken } from "./services/to
  */
 export { LegacyEmployeeClient, type SoapLogger } from "./integrations/soap/legacy-employee.client";
 export type { LegacyEmployeeRecord } from "./integrations/soap/legacy-employee.types";
+export { SettingsService } from "./services/settings.service";
+export type { SettingsAuditLogger, SettingsAuditEventInput } from "./interfaces/settings-audit-logger.interface";
 

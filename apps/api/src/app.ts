@@ -2,7 +2,7 @@ import cors from "cors";
 import express, { type Express } from "express";
 import pinoHttp from "pino-http";
 import type { AegisAIConfig } from "@aegisai/config";
-import { identityApiRouter, identityRouter } from "@aegisai/identity-service";
+import { createIdentityApiRouter, identityRouter, SettingsService } from "@aegisai/identity-service";
 import { AiRequestsService, PgAiRequestsRepository, createGatewayApiRouter, gatewayRouter } from "@aegisai/gateway-service";
 import { privacyRouter } from "@aegisai/privacy-service";
 import { ApprovalsService, PgApprovalsRepository, PoliciesService, PgPoliciesRepository, createPolicyApiRouter, policyRouter } from "@aegisai/policy-service";
@@ -151,9 +151,15 @@ export async function createApp(config: AegisAIConfig): Promise<Express> {
   app.use("/v1/model-provider", modelProviderRouter);
   app.use("/v1/security-audit", securityAuditRouter);
 
+  // Shared audit service instance used across services
+  const auditService = new AuditService();
+
   // Phase 2: Identity's public resource API, mounted at /v1 directly
   // (not /v1/identity — see the note above).
-  app.use("/v1", identityApiRouter);
+  // SettingsService is injected with the shared auditService instance to avoid
+  // circular dependencies between identity-service and security-audit-service.
+  const settingsService = new SettingsService(auditService);
+  app.use("/v1", createIdentityApiRouter({ settingsService }));
 
   // Phase 4: tie the Gateway <-> Policy knot (see the doc comment
   // above). `aiRequestsService` is constructed first with no
@@ -163,7 +169,6 @@ export async function createApp(config: AegisAIConfig): Promise<Express> {
   // `approvalsService` (which structurally satisfies its
   // `ApprovalCreator` interface) via `setApprovalCreator`.
   
-  const auditService = new AuditService();
   const aiRequestsService = new AiRequestsService(new PgAiRequestsRepository(), undefined, undefined, undefined, undefined, logger, undefined, undefined, auditService);
   const approvalsService = new ApprovalsService(new PgApprovalsRepository(), {
     onApprovalDecided: (aiRequestId, decision, reason) => aiRequestsService.resumeAfterApproval(aiRequestId, decision, reason),

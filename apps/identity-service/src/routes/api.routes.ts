@@ -13,6 +13,7 @@ import { buildUsersRoutes } from "./users.routes";
 import { buildLegacyEmployeeRoutes } from "./legacy-employee.routes";
 import { buildSettingsRoutes } from "./settings.routes";
 import { SettingsService } from "../services/settings.service";
+import type { SettingsAuditLogger } from "../interfaces/settings-audit-logger.interface";
 import { LegacyEmployeeClient, type SoapLogger } from "../integrations/soap/legacy-employee.client";
 
 export interface IdentityApiDependencies {
@@ -21,6 +22,7 @@ export interface IdentityApiDependencies {
   serviceAccountsService?: ServiceAccountsService;
   organizationsService?: OrganizationsService;
   settingsService?: SettingsService;
+  auditLogger?: SettingsAuditLogger;
   legacyEmployeeClient?: LegacyEmployeeClient;
   /** Structured logger for the SOAP connector (Phase 10) — same optional-logger convention as `AiRequestsService`'s audit logging. */
   soapLogger?: SoapLogger;
@@ -63,7 +65,14 @@ export function createIdentityApiRouter(deps: IdentityApiDependencies = {}): Rou
   const usersService = deps.usersService ?? new UsersService(usersRepository, organizationsRepository);
   const serviceAccountsService = deps.serviceAccountsService ?? new ServiceAccountsService(serviceAccountsRepository);
   const organizationsService = deps.organizationsService ?? new OrganizationsService(organizationsRepository);
-  const settingsService = deps.settingsService ?? new SettingsService();
+  const fallbackAuditLogger: SettingsAuditLogger = {
+    recordEvent: async () => {
+      throw new Error("SettingsAuditLogger was not provided to SettingsService.");
+    },
+  };
+  const settingsService =
+    deps.settingsService ??
+    new SettingsService(deps.auditLogger ?? fallbackAuditLogger);
   const legacyEmployeeClient =
     deps.legacyEmployeeClient ?? new LegacyEmployeeClient(process.env.SOAP_MOCK_URL ?? "http://localhost:5005", deps.soapLogger);
 
