@@ -11,9 +11,24 @@ const config = loadConfig();
 async function startServer() {
   const app = await createApp(config);
   
-  app.listen(config.port, () => {
-    logger.info(`API Gateway listening on port ${config.port}`);
+  const server = app.listen(config.port, "0.0.0.0", () => {
+    logger.info(`API Gateway listening on port ${config.port} on 0.0.0.0`);
   });
+
+  const shutdown = (signal: string) => {
+    logger.info(`Received ${signal}, shutting down gracefully...`);
+    server.close(() => {
+      logger.info("HTTP server closed.");
+      process.exit(0);
+    });
+    setTimeout(() => {
+      logger.error("Could not close connections in time, forcefully shutting down");
+      process.exit(1);
+    }, 10000).unref();
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
 startServer().catch(err => {

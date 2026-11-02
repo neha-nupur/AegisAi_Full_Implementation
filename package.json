@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "npm run prep && npm run dev -w apps/api",
     "build:packages": "npm run build -w packages/shared-types -w packages/config -w packages/schemas",
-    "build:services": "npm run build -w apps/identity-service && npm run build -w apps/security-audit-service && npm run build -w apps/privacy-service -w apps/policy-service -w apps/model-provider-service -w apps/gateway-service",
+    "build:services": "npm run build -w apps/identity-service && npm run build -w apps/security-audit-service && npm run build -w apps/privacy-service && npm run build -w apps/policy-service && npm run build -w apps/model-provider-service && npm run build -w apps/gateway-service",
     "prep": "npm run build:packages && npm run build:services",
     "build": "npm run prep && npm run build -w apps/api -w apps/frontend",
     "db:migrate:identity": "npm run build -w apps/identity-service && npm run migrate -w apps/identity-service",
@@ -30,13 +30,16 @@
     "typescript": "5.6.3"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19.0 <=22.x"
   },
   "dependencies": {
     "ioredis": "^5.0.0"
   },
   "optionalDependencies": {
-    "@rolldown/binding-linux-x64-gnu": "1.2.13"
+    "@oxlint/binding-linux-x64-gnu": "1.87.0",
+    "@rolldown/binding-linux-x64-gnu": "1.2.13",
+    "@tailwindcss/oxide-linux-x64-gnu": "4.3.3",
+    "lightningcss-linux-x64-gnu": "1.32.0"
   },
   "overrides": {
     "graphql": "16.14.2",
