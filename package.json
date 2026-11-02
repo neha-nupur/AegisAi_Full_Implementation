@@ -33,6 +33,7 @@
     "node": ">=20.19.0 <=22.x"
   },
   "dependencies": {
+    "graphql": "16.14.2",
     "ioredis": "^5.0.0"
   },
   "optionalDependencies": {
