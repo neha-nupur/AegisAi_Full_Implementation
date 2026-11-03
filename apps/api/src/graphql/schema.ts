@@ -23,8 +23,10 @@ export const typeDefs = `#graphql
     id: ID!
     organizationId: String!
     name: String!
+    version: Int
+    status: String!
+    action: String
     description: String
-    action: String!
     createdAt: String!
     updatedAt: String!
   }
