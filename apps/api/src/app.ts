@@ -96,7 +96,19 @@ export async function createApp(config: AegisAIConfig): Promise<Express> {
 
   app.use(
     cors({
-      origin: config.corsOrigins,
+      origin: (requestOrigin, callback) => {
+        // Allow requests with no origin (e.g. curl, health checks, or server-to-server)
+        if (!requestOrigin) return callback(null, true);
+        const normalizedRequestOrigin = requestOrigin.replace(/\/+$/, "");
+        const isAllowed = config.corsOrigins.some((allowed) => {
+          const normalizedAllowed = allowed.replace(/\/+$/, "");
+          return normalizedAllowed === normalizedRequestOrigin;
+        });
+        if (isAllowed) {
+          return callback(null, true);
+        }
+        return callback(null, false);
+      },
       credentials: true,
     })
   );

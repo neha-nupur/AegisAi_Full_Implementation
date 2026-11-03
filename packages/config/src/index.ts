@@ -88,7 +88,7 @@ export function loadConfig(): AegisAIConfig {
     jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "15m",
     corsOrigins: requireEnv("CORS_ORIGINS")
       .split(",")
-      .map((origin) => origin.trim())
+      .map((origin) => origin.trim().replace(/\/+$/, ""))
       .filter((origin) => origin.length > 0),
     soapMockUrl: process.env.SOAP_MOCK_URL ?? "http://localhost:5005",
   };
