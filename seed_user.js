@@ -7,6 +7,7 @@ try {
 }
 const { Pool } = require("pg");
 const bcrypt = require("bcrypt");
+const { resolvePgPoolConfig } = require("@aegisai/config");
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -27,13 +28,19 @@ if (!email || !password) {
   process.exit(1);
 }
 
-const pool = new Pool({ connectionString: databaseUrl });
+const poolConfig = resolvePgPoolConfig(databaseUrl, process.env.NODE_ENV);
+const pool = new Pool(poolConfig);
 
 async function seed() {
   try {
-    const userRes = await pool.query("SELECT id FROM users WHERE email = $1", [email]);
+    const userRes = await pool.query("SELECT id, email_verified FROM users WHERE email = $1", [email]);
     if (userRes.rows.length > 0) {
-      console.log("User already exists:", email);
+      if (!userRes.rows[0].email_verified) {
+        await pool.query("UPDATE users SET email_verified = true WHERE email = $1", [email]);
+        console.log("User already exists; verified seed admin account:", email);
+      } else {
+        console.log("User already exists:", email);
+      }
       return;
     }
 
@@ -48,8 +55,8 @@ async function seed() {
 
     const hash = await bcrypt.hash(password, 10);
     await pool.query(
-      "INSERT INTO users (organization_id, email, password_hash, role, status) VALUES ($1, $2, $3, $4, $5)",
-      [orgId, email, hash, role, "active"]
+      "INSERT INTO users (organization_id, email, password_hash, role, status, email_verified) VALUES ($1, $2, $3, $4, $5, $6)",
+      [orgId, email, hash, role, "active", true]
     );
     console.log("User created:", email);
   } catch (err) {

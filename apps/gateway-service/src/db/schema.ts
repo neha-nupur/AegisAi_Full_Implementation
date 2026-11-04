@@ -33,17 +33,32 @@ CREATE INDEX IF NOT EXISTS idx_ai_requests_organization_created ON ai_requests (
 
 -- Phase 4: widens the status check constraint for tables created by
 -- Phase 3's migration (which only allowed the six original states).
--- Safe to run repeatedly: drops the constraint only if present, then
--- always recreates it with the current, wider set of valid statuses.
+-- Scoped to ai_requests table; uses NOT VALID + VALIDATE CONSTRAINT
+-- to prevent long table locks and avoid dropping if already up to date.
 DO $$
 BEGIN
   IF EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'ai_requests_status_check'
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'ai_requests_status_check'
+      AND conrelid = 'ai_requests'::regclass
   ) THEN
-    ALTER TABLE ai_requests DROP CONSTRAINT ai_requests_status_check;
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'ai_requests_status_check'
+        AND conrelid = 'ai_requests'::regclass
+        AND pg_get_constraintdef(oid) LIKE '%APPROVAL_REQUIRED%'
+    ) THEN
+      ALTER TABLE ai_requests DROP CONSTRAINT ai_requests_status_check;
+      ALTER TABLE ai_requests ADD CONSTRAINT ai_requests_status_check CHECK (
+        status IN ('RECEIVED', 'VALIDATED', 'ROUTING', 'PROVIDER_CALL', 'COMPLETED', 'FAILED', 'BLOCKED', 'APPROVAL_REQUIRED')
+      ) NOT VALID;
+      ALTER TABLE ai_requests VALIDATE CONSTRAINT ai_requests_status_check;
+    END IF;
+  ELSE
+    ALTER TABLE ai_requests ADD CONSTRAINT ai_requests_status_check CHECK (
+      status IN ('RECEIVED', 'VALIDATED', 'ROUTING', 'PROVIDER_CALL', 'COMPLETED', 'FAILED', 'BLOCKED', 'APPROVAL_REQUIRED')
+    ) NOT VALID;
+    ALTER TABLE ai_requests VALIDATE CONSTRAINT ai_requests_status_check;
   END IF;
-  ALTER TABLE ai_requests ADD CONSTRAINT ai_requests_status_check CHECK (
-    status IN ('RECEIVED', 'VALIDATED', 'ROUTING', 'PROVIDER_CALL', 'COMPLETED', 'FAILED', 'BLOCKED', 'APPROVAL_REQUIRED')
-  );
 END $$;
 `;

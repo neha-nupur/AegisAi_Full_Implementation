@@ -18,7 +18,7 @@
     "test:watch": "npm run prep && npm run test:watch -w apps/api",
     "typecheck": "npm run prep && npm run typecheck --workspaces --if-present",
     "lint": "echo 'lint: not configured yet (Phase 0 placeholder)' && exit 0",
-    "db:migrate": "npm run build:services && npm run migrate -w apps/identity-service && npm run migrate -w apps/gateway-service && npm run migrate -w apps/policy-service && npm run migrate -w apps/model-provider-service",
+    "db:migrate": "node scripts/migrate.js",
     "db:seed": "npm run seed -w apps/model-provider-service"
   },
   "devDependencies": {

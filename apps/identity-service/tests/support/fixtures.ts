@@ -29,6 +29,14 @@ export interface Fixtures {
   };
 }
 
+let cachedHashes: {
+  adminAHash: string;
+  developerAHash: string;
+  auditorAHash: string;
+  disabledAHash: string;
+  adminBHash: string;
+} | null = null;
+
 /** Builds a fresh, isolated set of fixtures — call once per test (or per `describe` block) so tests never share mutable state. */
 export async function buildFixtures(): Promise<Fixtures> {
   const organizations = new InMemoryOrganizationsRepository();
@@ -50,13 +58,19 @@ export async function buildFixtures(): Promise<Fixtures> {
     adminB: "Correct-Horse-Battery-Staple-5",
   };
 
-  const [adminAHash, developerAHash, auditorAHash, disabledAHash, adminBHash] = await Promise.all([
-    passwordService.hash(passwords.adminA),
-    passwordService.hash(passwords.developerA),
-    passwordService.hash(passwords.auditorA),
-    passwordService.hash(passwords.disabledA),
-    passwordService.hash(passwords.adminB),
-  ]);
+  // Cache fixture hashes across test runs to avoid repeated 12-round bcrypt hashing in beforeEach
+  if (!cachedHashes) {
+    const [adminAHash, developerAHash, auditorAHash, disabledAHash, adminBHash] = await Promise.all([
+      passwordService.hash(passwords.adminA),
+      passwordService.hash(passwords.developerA),
+      passwordService.hash(passwords.auditorA),
+      passwordService.hash(passwords.disabledA),
+      passwordService.hash(passwords.adminB),
+    ]);
+    cachedHashes = { adminAHash, developerAHash, auditorAHash, disabledAHash, adminBHash };
+  }
+
+  const { adminAHash, developerAHash, auditorAHash, disabledAHash, adminBHash } = cachedHashes;
 
   const adminA: User = {
     id: randomUUID(),

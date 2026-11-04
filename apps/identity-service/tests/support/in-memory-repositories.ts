@@ -65,6 +65,10 @@ export class InMemoryUsersRepository implements UsersRepository {
     this.rows.set(user.id, user);
   }
 
+  async withTransaction<T>(callback: (client: any) => Promise<T>): Promise<T> {
+    return callback(null);
+  }
+
   async create(input: CreateUserInput): Promise<User> {
     const now = new Date().toISOString();
     const user: User = {
@@ -75,6 +79,8 @@ export class InMemoryUsersRepository implements UsersRepository {
       passwordHash: input.passwordHash,
       role: input.role,
       status: "active",
+      verificationTokenHash: input.verificationTokenHash ?? null,
+      verificationTokenExpiresAt: input.verificationTokenExpiresAt ?? null,
       createdAt: now,
       updatedAt: now,
     };

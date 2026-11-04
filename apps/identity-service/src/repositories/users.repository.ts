@@ -1,4 +1,4 @@
-import type { Pool, QueryResultRow } from "pg";
+import type { Pool, PoolClient, QueryResultRow } from "pg";
 import { getPool } from "../db/pool";
 import type { Role } from "../domain/rbac";
 import type { EntityStatus, User } from "../types";
@@ -8,6 +8,8 @@ export interface CreateUserInput {
   email: string;
   passwordHash: string;
   role: Role;
+  verificationTokenHash?: string | null;
+  verificationTokenExpiresAt?: string | null;
 }
 
 export interface UpdateUserInput {
@@ -22,6 +24,8 @@ export interface UpdateUserInput {
   resetTokenExpiresAt?: string | null;
 }
 
+type Queryable = Pool | PoolClient;
+
 /**
  * Repository contract for `users`. The only code allowed to query
  * this table directly (CLAUDE.md section 3) — everything else goes
@@ -29,12 +33,13 @@ export interface UpdateUserInput {
  * can inject an in-memory fake instead of a real database.
  */
 export interface UsersRepository {
-  create(input: CreateUserInput): Promise<User>;
-  findById(id: string): Promise<User | null>;
-  findByEmail(email: string): Promise<User | null>;
+  create(input: CreateUserInput, client?: Queryable): Promise<User>;
+  findById(id: string, client?: Queryable): Promise<User | null>;
+  findByEmail(email: string, client?: Queryable): Promise<User | null>;
   /** Lists users. Scoping to the caller's organization is the service layer's job, not the repository's. */
-  listByOrganization(organizationId: string): Promise<User[]>;
-  update(id: string, patch: UpdateUserInput): Promise<User | null>;
+  listByOrganization(organizationId: string, client?: Queryable): Promise<User[]>;
+  update(id: string, patch: UpdateUserInput, client?: Queryable): Promise<User | null>;
+  withTransaction?<T>(callback: (client: Queryable) => Promise<T>): Promise<T>;
 }
 
 interface UserRow extends QueryResultRow {
@@ -79,36 +84,63 @@ export class PgUsersRepository implements UsersRepository {
     return getPool();
   }
 
-  async create(input: CreateUserInput): Promise<User> {
-    const result = await this.pool.query<UserRow>(
-      `INSERT INTO users (organization_id, email, password_hash, role)
-       VALUES ($1, $2, $3, $4)
+  async withTransaction<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await callback(client);
+      await client.query("COMMIT");
+      return result;
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async create(input: CreateUserInput, client?: Queryable): Promise<User> {
+    const executor = client ?? this.pool;
+    const result = await executor.query<UserRow>(
+      `INSERT INTO users (organization_id, email, password_hash, role, verification_token_hash, verification_token_expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING ${SELECT_COLUMNS}`,
-      [input.organizationId, input.email, input.passwordHash, input.role]
+      [
+        input.organizationId,
+        input.email,
+        input.passwordHash,
+        input.role,
+        input.verificationTokenHash ?? null,
+        input.verificationTokenExpiresAt ? new Date(input.verificationTokenExpiresAt) : null,
+      ]
     );
     return toUser(result.rows[0]);
   }
 
-  async findById(id: string): Promise<User | null> {
-    const result = await this.pool.query<UserRow>(`SELECT ${SELECT_COLUMNS} FROM users WHERE id = $1`, [id]);
+  async findById(id: string, client?: Queryable): Promise<User | null> {
+    const executor = client ?? this.pool;
+    const result = await executor.query<UserRow>(`SELECT ${SELECT_COLUMNS} FROM users WHERE id = $1`, [id]);
     return result.rows[0] ? toUser(result.rows[0]) : null;
   }
 
-  async findByEmail(email: string): Promise<User | null> {
-    const result = await this.pool.query<UserRow>(`SELECT ${SELECT_COLUMNS} FROM users WHERE email = $1`, [email]);
+  async findByEmail(email: string, client?: Queryable): Promise<User | null> {
+    const executor = client ?? this.pool;
+    const result = await executor.query<UserRow>(`SELECT ${SELECT_COLUMNS} FROM users WHERE email = $1`, [email]);
     return result.rows[0] ? toUser(result.rows[0]) : null;
   }
 
-  async listByOrganization(organizationId: string): Promise<User[]> {
-    const result = await this.pool.query<UserRow>(
+  async listByOrganization(organizationId: string, client?: Queryable): Promise<User[]> {
+    const executor = client ?? this.pool;
+    const result = await executor.query<UserRow>(
       `SELECT ${SELECT_COLUMNS} FROM users WHERE organization_id = $1 ORDER BY created_at ASC`,
       [organizationId]
     );
     return result.rows.map(toUser);
   }
 
-  async update(id: string, patch: UpdateUserInput): Promise<User | null> {
-    const result = await this.pool.query<UserRow>(
+  async update(id: string, patch: UpdateUserInput, client?: Queryable): Promise<User | null> {
+    const executor = client ?? this.pool;
+    const result = await executor.query<UserRow>(
       `UPDATE users
        SET email = COALESCE($2, email),
            email_verified = COALESCE($3, email_verified),

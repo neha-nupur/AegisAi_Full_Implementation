@@ -1,4 +1,4 @@
-import type { Pool, QueryResultRow } from "pg";
+import type { Pool, PoolClient, QueryResultRow } from "pg";
 import { getPool } from "../db/pool";
 import type { Organization } from "../types";
 
@@ -6,6 +6,8 @@ export interface UpdateOrganizationInput {
   name?: string;
   status?: Organization["status"];
 }
+
+type Queryable = Pool | PoolClient;
 
 /**
  * Repository contract for `organizations`. This — and its PostgreSQL
@@ -15,9 +17,9 @@ export interface UpdateOrganizationInput {
  * in-memory fake instead of requiring a real database.
  */
 export interface OrganizationsRepository {
-  findById(id: string): Promise<Organization | null>;
-  update(id: string, patch: UpdateOrganizationInput): Promise<Organization | null>;
-  create(name: string, slug: string): Promise<Organization>;
+  findById(id: string, client?: Queryable): Promise<Organization | null>;
+  update(id: string, patch: UpdateOrganizationInput, client?: Queryable): Promise<Organization | null>;
+  create(name: string, slug: string, client?: Queryable): Promise<Organization>;
 }
 
 interface OrganizationRow extends QueryResultRow {
@@ -52,16 +54,18 @@ export class PgOrganizationsRepository implements OrganizationsRepository {
     return getPool();
   }
 
-  async findById(id: string): Promise<Organization | null> {
-    const result = await this.pool.query<OrganizationRow>(
+  async findById(id: string, client?: Queryable): Promise<Organization | null> {
+    const executor = client ?? this.pool;
+    const result = await executor.query<OrganizationRow>(
       `SELECT id, name, slug, status, created_at, updated_at FROM organizations WHERE id = $1`,
       [id]
     );
     return result.rows[0] ? toOrganization(result.rows[0]) : null;
   }
 
-  async update(id: string, patch: UpdateOrganizationInput): Promise<Organization | null> {
-    const result = await this.pool.query<OrganizationRow>(
+  async update(id: string, patch: UpdateOrganizationInput, client?: Queryable): Promise<Organization | null> {
+    const executor = client ?? this.pool;
+    const result = await executor.query<OrganizationRow>(
       `UPDATE organizations
        SET name = COALESCE($2, name),
            status = COALESCE($3, status),
@@ -73,8 +77,9 @@ export class PgOrganizationsRepository implements OrganizationsRepository {
     return result.rows[0] ? toOrganization(result.rows[0]) : null;
   }
 
-  async create(name: string, slug: string): Promise<Organization> {
-    const result = await this.pool.query<OrganizationRow>(
+  async create(name: string, slug: string, client?: Queryable): Promise<Organization> {
+    const executor = client ?? this.pool;
+    const result = await executor.query<OrganizationRow>(
       `INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id, name, slug, status, created_at, updated_at`,
       [name, slug]
     );

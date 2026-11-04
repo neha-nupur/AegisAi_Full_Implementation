@@ -50,8 +50,6 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token_expires_at TIMESTA
 ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_hash TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires_at TIMESTAMPTZ;
 
--- Mark all pre-existing users as verified so they are not locked out
-UPDATE users SET email_verified = true WHERE email_verified = false AND verification_token_hash IS NULL;
 
 CREATE TABLE IF NOT EXISTS service_accounts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

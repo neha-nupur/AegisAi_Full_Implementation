@@ -54,7 +54,37 @@ export function errorHandler(
     return;
   }
 
-  req.log?.error({ err }, "Unhandled error");
+  // Database error mapping for unique constraint violations (e.g. concurrent duplicate registrations)
+  if (err?.code === "23505") {
+    const isEmail = err.constraint?.includes("email") || err.detail?.includes("email");
+    const body: ApiErrorBody = {
+      error: {
+        code: isEmail ? "EMAIL_ALREADY_EXISTS" : "CONFLICT",
+        message: isEmail
+          ? "A user with this email already exists."
+          : "A resource with these unique properties already exists.",
+        traceId,
+      },
+    };
+    res.status(409).json(body);
+    return;
+  }
+
+  req.log?.error(
+    {
+      traceId,
+      err: {
+        name: err?.name,
+        message: err?.message,
+        code: err?.code,
+        detail: err?.detail,
+        table: err?.table,
+        constraint: err?.constraint,
+        stack: err?.stack,
+      },
+    },
+    "Unhandled server error"
+  );
 
   const body: ApiErrorBody = {
     error: {

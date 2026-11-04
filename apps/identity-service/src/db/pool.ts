@@ -1,5 +1,5 @@
 import { Pool } from "pg";
-import { loadConfig } from "@aegisai/config";
+import { loadConfig, resolvePgPoolConfig } from "@aegisai/config";
 
 /**
  * The Identity service's PostgreSQL connection pool — the only
@@ -19,7 +19,7 @@ let pool: Pool | undefined;
 export function getPool(): Pool {
   if (!pool) {
     const config = loadConfig();
-    pool = new Pool({ connectionString: config.databaseUrl });
+    pool = new Pool(resolvePgPoolConfig(config.databaseUrl, config.nodeEnv));
   }
   return pool;
 }

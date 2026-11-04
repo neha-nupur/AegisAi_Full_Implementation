@@ -111,17 +111,6 @@ export class AuthService {
       throw new HttpError(400, "VALIDATION_ERROR", pwError);
     }
 
-    const existing = await this.users.findByEmail(email);
-    if (existing) {
-      throw new HttpError(409, "EMAIL_ALREADY_EXISTS", "A user with this email already exists.");
-    }
-
-    // Generate a basic org name from email domain
-    const domain = email.includes("@") ? email.split("@")[1] : "default";
-    const orgName = `${domain} Organization`;
-    const orgSlug = `${domain.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase()}-${Date.now()}`;
-
-    const organization = await this.organizations.create(orgName, orgSlug);
     const passwordHash = await this.passwords.hash(password);
 
     // Generate verification token
@@ -129,18 +118,52 @@ export class AuthService {
     const tokenHash = hashToken(rawToken);
     const expiresAt = new Date(Date.now() + VERIFICATION_TOKEN_EXPIRY_MS).toISOString();
 
-    const user = await this.users.create({
-      organizationId: organization.id,
-      email,
-      passwordHash,
-      role: role as any,
-    });
+    // Generate a basic org name from email domain
+    const domain = email.includes("@") ? email.split("@")[1] : "default";
+    const orgName = `${domain} Organization`;
+    const orgSlug = `${domain.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase()}-${Date.now()}`;
 
-    // Store verification token hash on the user
-    await this.users.update(user.id, {
-      verificationTokenHash: tokenHash,
-      verificationTokenExpiresAt: expiresAt,
-    });
+    const executeSignup = async (client?: any) => {
+      const existing = await this.users.findByEmail(email, client);
+      if (existing) {
+        throw new HttpError(409, "EMAIL_ALREADY_EXISTS", "A user with this email already exists.");
+      }
+
+      const organization = await this.organizations.create(orgName, orgSlug, client);
+      const user = await this.users.create(
+        {
+          organizationId: organization.id,
+          email,
+          passwordHash,
+          role: role as any,
+          verificationTokenHash: tokenHash,
+          verificationTokenExpiresAt: expiresAt,
+        },
+        client
+      );
+
+      return { organization, user };
+    };
+
+    let signupData: { user: any };
+    try {
+      if (typeof this.users.withTransaction === "function") {
+        signupData = await this.users.withTransaction(executeSignup);
+      } else {
+        signupData = await executeSignup();
+      }
+    } catch (err: any) {
+      if (err instanceof HttpError) throw err;
+      if (err?.code === "23505") {
+        if (err.constraint?.includes("email") || err.detail?.includes("email")) {
+          throw new HttpError(409, "EMAIL_ALREADY_EXISTS", "A user with this email already exists.");
+        }
+        throw new HttpError(409, "CONFLICT", "A resource with these unique properties already exists.");
+      }
+      throw err;
+    }
+
+    const user = signupData.user;
 
     try {
       await this.emailService.sendVerificationEmail(email, rawToken, role as string);
