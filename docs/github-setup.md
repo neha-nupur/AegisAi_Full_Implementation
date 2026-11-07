@@ -148,7 +148,7 @@ npm run db:migrate
 npm run db:seed
 
 # Seed the local administrator account using credentials from your .env
-node seed_user.js
+node scripts/seed_user.js
 ```
 
 ### Step 3: Start the Backend API

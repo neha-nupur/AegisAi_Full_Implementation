@@ -1,6 +1,6 @@
 const path = require("path");
 try {
-  require("dotenv").config({ path: path.join(__dirname, ".env") });
+  require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 } catch {}
 const http = require("http");
 
@@ -13,27 +13,21 @@ if (!password) {
 
 const data = JSON.stringify({
   email,
-  password
+  password,
 });
 
 const req = http.request({
   hostname: 'localhost',
-  port: 5173,
+  port: 4000,
   path: '/v1/auth/login',
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
-    'Content-Length': Buffer.byteLength(data)
+    'Content-Length': data.length
   }
 }, res => {
   console.log(`STATUS: ${res.statusCode}`);
-  let body = '';
-  res.on('data', chunk => {
-    body += chunk;
-  });
-  res.on('end', () => {
-    console.log(body);
-  });
+  res.on('data', d => process.stdout.write(d));
 });
 
 req.on('error', error => console.error(error));

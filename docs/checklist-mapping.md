@@ -1,6 +1,6 @@
 # AegisAI — 28-Item Checklist Mapping
 
-Tracks the professor's 28 requirements against the phase that
+Tracks the 28 requirements against the phase that
 introduces them and current status. A requirement is only "Done" once
 it has an implementation, a test where appropriate, documentation, and
 can be demonstrated — not merely because code exists.
@@ -24,23 +24,23 @@ can be demonstrated — not merely because code exists.
 | 15 | Circuit breaker | 7 | **Done** — `ResilientProviderAdapter` uses `cockatiel` to trip circuit after 5 failures, protecting providers from cascade failures |
 | 16 | SQL database with parameterized queries | 2+ | **Done** — `organizations`/`users`/`service_accounts` (Phase 2), `ai_requests` (Phase 3), `policies`/`approvals` (Phase 4) in PostgreSQL, all queries parameterized via `pg` |
 | 17 | CORS configured deliberately | 0 | **Done** — `cors()` reads `CORS_ORIGINS` from config |
-| 18 | Deployed and reachable over the internet | 11 | Not started — no internet-facing deployment exists; verified locally only (see `docs/deployment.md`'s honest status) |
+| 18 | Deployed and reachable over the internet | 11 | Not started — no internet-facing deployment exists; verified locally only (see `docs/AegisAI-Complete-Project-Overview.md`) |
 | 19 | Swagger UI served from own service | 11 | **Done** — served at `GET /docs` from `apps/api` itself, no separate service needed |
 | 20 | Timeout on every outbound call | 7 | **Done** — `ResilientProviderAdapter` enforces a strict 30s timeout on all outbound `generate()` calls |
 | 21 | Express middleware and central error handling | 0 | **Done** — correlation ID, error handler, 404 handler |
 | 22 | NoSQL document store | 0 (infra) / 4+ (usage) | **Done** — MongoDB `scanner_results` (Phase 4), via the official `mongodb` driver in `apps/privacy-service/src/db/mongo.ts` |
-| 23 | Automated tests with Jest and Supertest | 0+ | **Done** — 146 tests across 33 suites (unit, integration, resilience) covering every service; includes a Phase 11 regression suite (`apps/security-audit-service/tests/api.routes.test.ts`) proving a real pre-existing auth gap in the Security & Audit query API is closed — see `docs/phase-progress.md`'s Phase 11 section |
+| 23 | Automated tests with Jest and Supertest | 0+ | **Done** — 146 tests across 33 suites (unit, integration, resilience) covering every service; includes a Phase 11 regression suite (`apps/security-audit-service/tests/api.routes.test.ts`) proving a real pre-existing auth gap in the Security & Audit query API is closed — see `docs/AegisAI-Complete-Project-Overview.md` |
 | 24 | Reading a WSDL, and one SOAP call | 10 | **Done** — `soap-mock/service.wsdl` + `soap-mock/server/index.js` (a real SOAP 1.1 `CheckLegacyEmployee` service); `LegacyEmployeeClient` (`apps/identity-service/src/integrations/soap/`) parses the WSDL, makes real SOAP calls with timeout/retry/circuit breaker (`cockatiel`), and propagates the correlation ID as a SOAP header — exposed at `GET /v1/legacy-employees/:employeeId`, tested against a real ephemeral local SOAP server in `tests/legacy-employee.client.test.ts` |
 | 25 | Retry with increasing backoff | 7 | **Done** — `ResilientProviderAdapter` retries up to 3 times with exponential backoff on retryable HTTP errors (429, 500+) |
 | 26 | Structured logging with a correlation ID | 0 | **Done** — Pino + `correlationIdMiddleware`; fully integrated with persistent audit trails and request tracing in the security-audit-service (Phase 8) |
 | 27 | JWT authentication and authorization | 2 | **Done** — `POST /v1/auth/login`, `authenticateJWT`/`requireRole`/`requirePermission` (see the C1–C5 mapping and `apps/identity-service/README.md`); reused as-is to protect `/v1/ai-requests` (Phase 3) and `/v1/policies`/`/v1/approvals` (Phase 4) |
-| 28 | Docker, and twelve-factor configuration | 0 (infra) / 11 (full) | **Done, not build-verified** — `docker-compose.yml` covers all 7 services (postgres, mongo, redis, soap-mock, api, worker, frontend) with healthcheck-gated startup order; `.env.example` + typed config throughout. Docker itself is unavailable in the sandbox this was built in, so the images were never actually built or run — see `docs/deployment.md` |
+| 28 | Docker, and twelve-factor configuration | 0 (infra) / 11 (full) | **Done, not build-verified** — `docker-compose.yml` covers all 7 services (postgres, mongo, redis, soap-mock, api, worker, frontend) with healthcheck-gated startup order; `.env.example` + typed config throughout. Docker itself is unavailable in the sandbox this was built in, so the images were never actually built or run — see `docs/AegisAI-Complete-Project-Overview.md` |
 
 ## Identity & Access Management — C1–C5 mapping (Phase 2)
 
 The Phase 2 instructions asked for "C1–C5" and "professor requirement
 #27" to be mapped to the implementation. **C1–C5 don't appear
-anywhere else in this repository or in `CLAUDE.md`**, so this mapping
+anywhere else in this repository or in project documentation**, so this mapping
 is an inference — each `C` is matched to one of the five labeled
 sections of the Phase 2 instructions themselves, in order. If your
 rubric defines C1–C5 differently, tell me and this table gets

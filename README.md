@@ -123,7 +123,7 @@ npm run db:migrate
 npm run db:seed
 
 # Seed the initial administrator user from SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD
-node seed_user.js
+node scripts/seed_user.js
 ```
 
 ### 5. Start Backend and Frontend
@@ -145,9 +145,13 @@ Log in to the dashboard at `http://localhost:5173` using the email and password 
 
 ## Documentation Links
 
+- [Complete Technical Overview](docs/AegisAI-Complete-Project-Overview.md) — System architecture, technology stack, microservice deep dive, and compliance matrix.
+- [Operator & User Guide](docs/AegisAI-Operator-Guide.md) — Setup, user journeys (authentication, registration, recovery), dashboard navigation, and operations.
+- [REST API Demonstration Guide](docs/AegisAI-REST-API-Demonstration-Guide.md) — Laboratory demonstration scripts, cURL commands, and request flows.
 - [GitHub Setup & Evaluation Guide](docs/github-setup.md) — Step-by-step instructions for cloning, configuring, and testing.
-- [Architectural Contract (CLAUDE.md)](CLAUDE.md) — Service boundaries, communication contracts, and error envelopes.
-- [REST API Demonstration Guide](docs/AegisAI-REST-API-Demonstration-Guide.md) — Curl examples, flow diagrams, and Postman test endpoints.
+- [Database Ownership](docs/database-ownership.md) — Multi-database architecture across PostgreSQL, MongoDB, and Redis.
+- [28-Requirement Checklist Mapping](docs/checklist-mapping.md) — Coursework requirements matrix and C1–C5 specifications.
+- [28-Requirement Final Evidence Matrix](docs/final-evidence-matrix.md) — Verification evidence, demo commands, and component mappings.
 - [Interactive Swagger Docs](http://localhost:4000/docs) — OpenAPI 3.0 UI rendered directly from the running gateway.
 
 ---

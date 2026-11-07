@@ -1,6 +1,6 @@
 const path = require("path");
 try {
-  require("dotenv").config({ path: path.join(__dirname, ".env") });
+  require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 } catch {
   // dotenv is available via the workspace install; if it is missing,
   // the script still works when the caller has already exported env vars.

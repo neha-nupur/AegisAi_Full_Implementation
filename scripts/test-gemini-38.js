@@ -1,6 +1,6 @@
 const path = require("path");
 try {
-  require("dotenv").config({ path: path.join(__dirname, ".env") });
+  require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 } catch {}
 
 const apiKey = process.env.GEMINI_API_KEY;
@@ -26,7 +26,5 @@ const testModel = (modelName) => {
 };
 
 (async () => {
-  await testModel("gemini-1.5-flash-latest");
-  await testModel("gemini-1.5-flash-001");
-  await testModel("gemini-pro");
+  await testModel("gemini-3.8-flash");
 })();

@@ -19,7 +19,8 @@
     "typecheck": "npm run prep && npm run typecheck --workspaces --if-present",
     "lint": "echo 'lint: not configured yet (Phase 0 placeholder)' && exit 0",
     "db:migrate": "node scripts/migrate.js",
-    "db:seed": "npm run seed -w apps/model-provider-service"
+    "db:seed": "npm run seed -w apps/model-provider-service",
+    "db:seed:admin": "node scripts/seed_user.js"
   },
   "devDependencies": {
     "@types/ioredis": "^5.0.0",
