@@ -39,6 +39,7 @@ packages/
 openapi/                   OpenAPI 3.0 specification document
 docker/                    Docker Compose orchestration and container Dockerfiles
 soap-mock/                 Mock legacy enterprise SOAP/WSDL employee verification service
+scripts/                   Database migration runner, admin seed, and verification test suites
 docs/                      Architecture contracts, setup guides, and demonstration protocols
 ```
 
@@ -96,10 +97,10 @@ Review `.env` and configure your local settings:
 Verify code health, build, and test suites across all packages and services:
 
 ```bash
-# Check TypeScript types across all 9 workspaces
+# Check TypeScript types across all workspaces
 npm run typecheck
 
-# Run all 38 Jest test suites (167 automated tests)
+# Run all 39 Jest test suites (187 automated tests)
 npm test
 
 # Build production bundles for backend services and frontend
@@ -123,7 +124,11 @@ npm run db:migrate
 npm run db:seed
 
 # Seed the initial administrator user from SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD
-node scripts/seed_user.js
+npm run db:seed:admin
+# or directly: node scripts/seed_user.js
+
+# Optional: Run local refinements & security verification suite
+node scripts/verify_refinements.js
 ```
 
 ### 5. Start Backend and Frontend
@@ -139,7 +144,35 @@ npm run dev -w apps/frontend
 # The Web Dashboard is ready at http://localhost:5173
 ```
 
-Log in to the dashboard at `http://localhost:5173` using the email and password you configured in `.env`.
+Log in to the dashboard at `http://localhost:5173` using your seeded administrator credentials or register a new account.
+
+---
+
+## Core Application Flows & User Journeys
+
+AegisAI provides an end-to-end security pipeline and smooth developer experience:
+
+### 1. Instant User Registration & Auto-Login Flow
+- **Seamless Onboarding:** When a new user registers via `/v1/auth/signup`, the backend creates their user account, provisions their tenant organization, and immediately signs an HS256 JWT access token.
+- **Immediate Dashboard Access:** The React frontend automatically stores the token, updates `AuthContext`, and transitions the user directly to `/dashboard` without manual login friction.
+- **Security & Verification Tracking:** Unverified email accounts maintain `email_verified: false` and generate cryptographic verification tokens, enabling continuous compliance auditing and email confirmation workflows without blocking initial developer evaluation.
+
+### 2. End-to-End AI Gateway Request Pipeline (`POST /v1/ai-requests`)
+Every outbound AI generation request passes through a 5-stage synchronous governance pipeline:
+1. **Authentication & Idempotency:** The gateway validates the Bearer JWT, enforces RBAC permissions, checks rate limits via Redis token buckets, and validates the `Idempotency-Key` header against Redis cache to prevent duplicate billing.
+2. **Privacy & DLP Scanning:** The `privacy-service` deterministically scans input prompts for PII (emails, phone numbers, credit cards, Indian PAN/Aadhaar) and secrets (API keys, private keys, passwords). Sensitive data can be masked back-to-front before provider dispatch.
+3. **Policy Evaluation:** The `policy-service` applies organizational rules against detected sensitivity and content. Actions include `ALLOW`, `BLOCK` (HTTP 403), `MASK`, or `REQUIRE_APPROVAL` (HTTP 202).
+4. **Resilient Model Routing:** The `model-provider-service` resolves approved models with suitable sensitivity levels ($\text{Model Sensitivity} \ge \text{Prompt Sensitivity}$) and dispatches outbound calls through Cockatiel-wrapped adapters featuring 30s timeouts, exponential backoff with jitter (3 retries), and 5-failure circuit breakers.
+5. **Observability & Distributed Tracing:** The `security-audit-service` correlates the entire lifecycle under a unified `x-correlation-id`, logging request traces, security detections, and immutable audit entries in MongoDB.
+
+### 3. Human-in-the-Loop Approval Governance
+- Requests flagged with `REQUIRE_APPROVAL` pause execution in a `PENDING` state and surface immediately on the React dashboard.
+- Designated `ORGANIZATION_ADMIN` users review the blocked prompt, inspect detected risk factors, and approve or reject the request.
+- Approved requests seamlessly resume through the gateway to the model provider, returning completed AI output to the caller.
+
+### 4. Enterprise Legacy System Integration (SOAP/WSDL)
+- AegisAI integrates modern REST/GraphQL workflows with enterprise directories via a dedicated SOAP 1.1 connector (`LegacyEmployeeClient`).
+- Features real WSDL parsing, XML serialization, and independent Cockatiel timeout and retry policies for legacy identity reconciliation.
 
 ---
 
