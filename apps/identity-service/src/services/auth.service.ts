@@ -17,6 +17,8 @@ export interface LoginResult {
 
 export interface SignupResult {
   message: string;
+  token: string;
+  expiresAt: string;
   user: PublicUser;
 }
 
@@ -172,8 +174,18 @@ export class AuthService {
       console.error(`[AuthService] [TRACE_ID: ${Date.now()}] Failed to send registration email to [REDACTED_EMAIL_PREFIX]...${email.split('@')[1]}: ${errorMsg}`);
     }
 
+    const permissions = permissionsForRole(user.role);
+    const issued = this.tokens.sign({
+      userId: user.id,
+      organizationId: user.organizationId,
+      role: user.role,
+      permissions,
+    });
+
     return {
-      message: "Account created. Please check your email to verify your account.",
+      message: "Account created successfully! Welcome to AegisAI.",
+      token: issued.token,
+      expiresAt: issued.expiresAt,
       user: toPublicUser(user),
     };
   }

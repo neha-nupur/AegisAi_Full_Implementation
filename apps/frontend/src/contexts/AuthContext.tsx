@@ -104,6 +104,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const handleAuthSuccess = useCallback(async (accessToken: string, emailHint?: string) => {
+    if (!accessToken) {
+      clearToken();
+      throw new ApiError(400, { code: 'INVALID_TOKEN', message: 'No token in response' });
+    }
+
+    const claims = parseJwt(accessToken);
+    if (!claims) {
+      clearToken();
+      throw new ApiError(400, { code: 'INVALID_TOKEN', message: 'Received invalid token' });
+    }
+
+    const user = claimsToUser(claims);
+    if (!user) {
+      clearToken();
+      throw new ApiError(400, { code: 'INVALID_TOKEN', message: 'Token missing required claims' });
+    }
+
+    try {
+      setToken(accessToken);
+    } catch {
+      // Storage error (e.g. quota exceeded or disabled in private browsing); proceed in memory
+    }
+
+    if (emailHint && !user.email) {
+      user.email = emailHint;
+    }
+
+    setState({ user, token: accessToken, loading: false });
+
+    // Enrich email if needed
+    if (!user.email) {
+      await enrichUserEmail(user, accessToken);
+    }
+  }, []);
+
   const login = useCallback(async (email: string, password: string) => {
     // API returns { token, expiresAt, user } inside the { data } envelope.
     // api.post() unwraps .data, so result is { token, expiresAt, user }.
@@ -112,31 +148,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password,
     });
 
-    const { token: accessToken } = result;
-    if (!accessToken) throw new ApiError(400, { code: 'INVALID_TOKEN', message: 'No token in login response' });
-    setToken(accessToken);
-
-    const claims = parseJwt(accessToken);
-    if (!claims) throw new ApiError(400, { code: 'INVALID_TOKEN', message: 'Received invalid token' });
-
-    const user = claimsToUser(claims);
-    if (!user) throw new ApiError(400, { code: 'INVALID_TOKEN', message: 'Token missing required claims' });
-
-    setState({ user, token: accessToken, loading: false });
-
-    // Enrich email
-    await enrichUserEmail(user, accessToken);
-  }, []);
+    await handleAuthSuccess(result.token, email);
+  }, [handleAuthSuccess]);
 
   const signup = useCallback(async (email: string, password: string, role: string): Promise<string> => {
-    const result = await api.post<{ message: string; user: unknown }>('/auth/signup', {
+    const result = await api.post<{ message: string; token: string; expiresAt: string; user: unknown }>('/auth/signup', {
       email,
       password,
       role
     });
 
-    return result.message || 'Account created. Please check your email to verify your account.';
-  }, []);
+    if (!result?.token || typeof result.token !== 'string' || result.token.trim() === '') {
+      throw new ApiError(400, { code: 'INVALID_TOKEN', message: 'No token in signup response' });
+    }
+
+    await handleAuthSuccess(result.token, email);
+
+    return result.message || 'Account created successfully! Welcome to AegisAI.';
+  }, [handleAuthSuccess]);
 
   const logout = useCallback(() => {
     clearToken();

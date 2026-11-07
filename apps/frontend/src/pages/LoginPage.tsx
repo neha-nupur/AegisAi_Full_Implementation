@@ -2,10 +2,12 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { ApiError } from '../lib/api';
 
 export function LoginPage() {
   const { login, signup } = useAuth();
+  const { toast } = useToast();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState('');
@@ -34,9 +36,9 @@ export function LoginPage() {
           setLoading(false);
           return;
         }
-        const message = await signup(email.trim(), password, role);
-        setError({ message: message }); // Hack: Using error state to show success message
-        return; // Don't redirect, wait for user to verify email
+        await signup(email.trim(), password, role);
+        toast.success('Account created successfully! Welcome to AegisAI.');
+        navigate('/dashboard', { replace: true });
       } else {
         await login(email.trim(), password);
         navigate('/dashboard', { replace: true });
